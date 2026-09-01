@@ -1,0 +1,8 @@
+
+numpy
+tiktoken
+datasets
+tqdm
+pyyaml
+matplotlib
+pytest
