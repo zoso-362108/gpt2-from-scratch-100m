@@ -1,6 +1,12 @@
 import torch
 
-from src.model import CausalSelfAttention, GPTConfig
+from src.model import (
+    Block,
+    CausalSelfAttention,
+    GPT,
+    GPTConfig,
+    MLP,
+)
 
 
 def test_default_gpt2_config():
@@ -59,3 +65,156 @@ def test_attention_is_causal():
         modified_output[:, :4, :],
         atol=1e-5,
     )
+
+def test_mlp_output_shape():
+    config = GPTConfig(
+        block_size=16,
+        n_layer=2,
+        n_head=4,
+        n_embd=32,
+    )
+
+    mlp = MLP(config)
+    x = torch.randn(2, 8, 32)
+
+    output = mlp(x)
+
+    assert output.shape == x.shape
+    assert mlp.c_fc.out_features == 4 * config.n_embd
+    assert mlp.c_proj.out_features == config.n_embd
+
+
+def test_block_output_shape():
+    config = GPTConfig(
+        block_size=16,
+        n_layer=2,
+        n_head=4,
+        n_embd=32,
+    )
+
+    block = Block(config)
+    x = torch.randn(2, 8, 32)
+
+    output = block(x)
+
+    assert output.shape == x.shape
+
+
+def test_block_backward():
+    config = GPTConfig(
+        block_size=16,
+        n_layer=2,
+        n_head=4,
+        n_embd=32,
+    )
+
+    block = Block(config)
+    x = torch.randn(2, 8, 32, requires_grad=True)
+
+    output = block(x)
+    loss = output.square().mean()
+    loss.backward()
+
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+    for parameter in block.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+
+def create_tiny_config():
+    return GPTConfig(
+        block_size=16,
+        vocab_size=100,
+        n_layer=2,
+        n_head=4,
+        n_embd=32,
+    )
+
+
+def test_gpt_output_shape():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    idx = torch.randint(
+        0,
+        config.vocab_size,
+        (2, 8),
+    )
+
+    logits, loss = model(idx)
+
+    assert logits.shape == (
+        2,
+        8,
+        config.vocab_size,
+    )
+    assert loss is None
+
+
+def test_gpt_training_loss_and_backward():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    idx = torch.randint(
+        0,
+        config.vocab_size,
+        (2, 8),
+    )
+
+    targets = torch.randint(
+        0,
+        config.vocab_size,
+        (2, 8),
+    )
+
+    logits, loss = model(idx, targets)
+
+    assert logits.shape == (
+        2,
+        8,
+        config.vocab_size,
+    )
+    assert loss is not None
+    assert loss.ndim == 0
+    assert torch.isfinite(loss)
+
+    loss.backward()
+
+    for parameter in model.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+
+
+def test_embedding_and_lm_head_share_weights():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    embedding_weight = model.transformer["wte"].weight
+    output_weight = model.lm_head.weight
+
+    assert embedding_weight is output_weight
+    assert (
+        embedding_weight.data_ptr()
+        == output_weight.data_ptr()
+    )
+
+
+def test_sequence_length_limit():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    idx = torch.randint(
+        0,
+        config.vocab_size,
+        (1, config.block_size + 1),
+    )
+
+    try:
+        model(idx)
+    except ValueError as error:
+        assert "exceeds block size" in str(error)
+    else:
+        raise AssertionError(
+            "Expected ValueError for excessive sequence length"
+        )
