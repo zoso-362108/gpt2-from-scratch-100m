@@ -45,6 +45,7 @@ class CausalSelfAttention(nn.Module):
             config.n_embd,
             config.n_embd,
         )
+        self.c_proj.NANOGPT_SCALE_INIT = True
 
         self.n_head = config.n_head
         self.n_embd = config.n_embd
@@ -104,6 +105,7 @@ class MLP(nn.Module):
             4 * config.n_embd,
             config.n_embd,
         )
+        self.c_proj.NANOGPT_SCALE_INIT = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.c_fc(x)
@@ -173,6 +175,36 @@ class GPT(nn.Module):
         # GPT-2 使用权重共享：
         # Token Embedding 和输出层共用同一组权重
         self.transformer["wte"].weight = self.lm_head.weight
+        
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module: nn.Module) -> None:
+        if isinstance(module, nn.Linear):
+            std = 0.02
+
+            # 残差分支会随层数累积，因此缩小输出投影的初始化
+            if getattr(
+                    module,
+                    "NANOGPT_SCALE_INIT",
+                    False,
+            ):
+                std *= (2 * self.config.n_layer) ** -0.5
+
+            nn.init.normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+            )
+
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(
+                module.weight,
+                mean=0.0,
+                std=0.02,
+            )
 
     def forward(
         self,

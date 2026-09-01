@@ -218,3 +218,55 @@ def test_sequence_length_limit():
         raise AssertionError(
             "Expected ValueError for excessive sequence length"
         )
+
+def test_linear_biases_are_initialized_to_zero():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    for module in model.modules():
+        if (
+            isinstance(module, torch.nn.Linear)
+            and module.bias is not None
+        ):
+            assert torch.count_nonzero(module.bias) == 0
+
+
+def test_initialization_is_reproducible():
+    config = create_tiny_config()
+
+    torch.manual_seed(123)
+    first_model = GPT(config)
+
+    torch.manual_seed(123)
+    second_model = GPT(config)
+
+    first_parameters = dict(
+        first_model.named_parameters()
+    )
+    second_parameters = dict(
+        second_model.named_parameters()
+    )
+
+    assert first_parameters.keys() == second_parameters.keys()
+
+    for name in first_parameters:
+        assert torch.equal(
+            first_parameters[name],
+            second_parameters[name],
+        )
+
+
+def test_residual_projection_uses_scaled_init():
+    config = create_tiny_config()
+
+    torch.manual_seed(42)
+    model = GPT(config)
+
+    expected_std = (
+        0.02 * (2 * config.n_layer) ** -0.5
+    )
+
+    projection = model.transformer["h"][0].attn.c_proj
+    actual_std = projection.weight.std().item()
+
+    assert abs(actual_std - expected_std) < 0.003
