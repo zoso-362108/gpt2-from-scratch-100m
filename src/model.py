@@ -206,6 +206,132 @@ class GPT(nn.Module):
                 std=0.02,
             )
 
+    @classmethod
+    def from_pretrained(
+            cls,
+            model_type: str = "gpt2",
+            pretrained_source: str | None = None,
+    ) -> "GPT":
+        from transformers import GPT2LMHeadModel
+
+        supported_models = {
+            "gpt2": {
+                "n_layer": 12,
+                "n_head": 12,
+                "n_embd": 768,
+            },
+            "gpt2-medium": {
+                "n_layer": 24,
+                "n_head": 16,
+                "n_embd": 1024,
+            },
+            "gpt2-large": {
+                "n_layer": 36,
+                "n_head": 20,
+                "n_embd": 1280,
+            },
+            "gpt2-xl": {
+                "n_layer": 48,
+                "n_head": 25,
+                "n_embd": 1600,
+            },
+        }
+
+        if model_type not in supported_models:
+            raise ValueError(
+                f"Unsupported model type: {model_type}"
+            )
+
+        config_args = supported_models[model_type]
+
+        config = GPTConfig(
+            block_size=1024,
+            vocab_size=50257,
+            **config_args,
+        )
+
+        model = cls(config)
+
+        model_id = (
+            "openai-community/gpt2"
+            if model_type == "gpt2"
+            else model_type
+        )
+
+        source = (
+            pretrained_source
+            if pretrained_source is not None
+            else model_id
+        )
+
+        local_files_only = pretrained_source is not None
+
+        print(f"Loading pretrained weights from {source}")
+
+        hf_model = GPT2LMHeadModel.from_pretrained(
+            source,
+            local_files_only=local_files_only,
+        )
+
+        own_state = model.state_dict()
+        hf_state = hf_model.state_dict()
+
+        # Hugging Face 中的因果掩码缓冲区不是可训练参数，
+        # 我们使用 scaled_dot_product_attention，因此无需复制。
+        ignored_suffixes = (
+            ".attn.masked_bias",
+            ".attn.bias",
+        )
+
+        hf_keys = [
+            key
+            for key in hf_state
+            if not key.endswith(ignored_suffixes)
+        ]
+
+        own_keys = list(own_state.keys())
+
+        if len(hf_keys) != len(own_keys):
+            raise RuntimeError(
+                "State dictionary length mismatch: "
+                f"ours={len(own_keys)}, "
+                f"huggingface={len(hf_keys)}"
+            )
+
+        # Hugging Face Conv1D 权重的存储方向与
+        # torch.nn.Linear 相反，需要转置。
+        transposed_suffixes = (
+            "attn.c_attn.weight",
+            "attn.c_proj.weight",
+            "mlp.c_fc.weight",
+            "mlp.c_proj.weight",
+        )
+
+        with torch.no_grad():
+            for key in hf_keys:
+                if key not in own_state:
+                    raise KeyError(
+                        f"Missing key in local model: {key}"
+                    )
+
+                source = hf_state[key]
+                destination = own_state[key]
+
+                if key.endswith(transposed_suffixes):
+                    source = source.t()
+
+                if source.shape != destination.shape:
+                    raise RuntimeError(
+                        f"Shape mismatch for {key}: "
+                        f"ours={tuple(destination.shape)}, "
+                        f"huggingface={tuple(source.shape)}"
+                    )
+
+                destination.copy_(source)
+
+        model.eval()
+        return model
+
     def forward(
         self,
         idx: torch.Tensor,
