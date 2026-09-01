@@ -1,17 +1,40 @@
+# Python 缓存
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+
+# 虚拟环境
 .venv/
 venv/
+
+# 编辑器配置
 .idea/
 .vscode/
+
+# 密钥和本地配置
 .env
+*.env
 
+# 数据集和缓存
 data/
-checkpoints/
-logs/
-wandb/
+cache/
+datasets/
 
+# 模型检查点
+checkpoints/*
+!checkpoints/.gitkeep
 *.pt
 *.pth
 *.ckpt
+
+# NumPy 数据分片
 *.npy
+*.npz
+
+# 训练日志和外部实验工具
+logs/
+wandb/
+
+# 系统文件
+.DS_Store
+Thumbs.db
