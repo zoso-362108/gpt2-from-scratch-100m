@@ -72,3 +72,45 @@ class CausalSelfAttention(nn.Module):
         )
 
         return self.c_proj(y)
+
+class MLP(nn.Module):
+    def __init__(self, config: GPTConfig):
+        super().__init__()
+
+        # GPT-2 的隐藏层通常扩展为嵌入维度的 4 倍
+        self.c_fc = nn.Linear(
+            config.n_embd,
+            4 * config.n_embd,
+        )
+
+        self.gelu = nn.GELU(approximate="tanh")
+
+        self.c_proj = nn.Linear(
+            4 * config.n_embd,
+            config.n_embd,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.c_fc(x)
+        x = self.gelu(x)
+        x = self.c_proj(x)
+        return x
+
+class Block(nn.Module):
+    def __init__(self, config: GPTConfig):
+        super().__init__()
+
+        self.ln_1 = nn.LayerNorm(config.n_embd)
+        self.attn = CausalSelfAttention(config)
+
+        self.ln_2 = nn.LayerNorm(config.n_embd)
+        self.mlp = MLP(config)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Pre-Norm + Attention + 残差连接
+        x = x + self.attn(self.ln_1(x))
+
+        # Pre-Norm + MLP + 残差连接
+        x = x + self.mlp(self.ln_2(x))
+
+        return x
