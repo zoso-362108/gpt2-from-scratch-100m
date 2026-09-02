@@ -1,5 +1,5 @@
 project:
-  name: gpt2-from-scratch-100m
+  name: gpt2-124m-benchmark
   seed: 1337
 
 data:
@@ -17,11 +17,11 @@ model:
 training:
   micro_batch_size: 4
   total_batch_tokens: 32768
-  max_steps: 3052
+  max_steps: 50
 
   max_learning_rate: 0.0006
   min_learning_rate: 0.00006
-  warmup_steps: 100
+  warmup_steps: 5
   weight_decay: 0.1
   gradient_clip: 1.0
 
@@ -29,10 +29,10 @@ training:
   compile: false
 
 evaluation:
-  interval: 250
-  batches: 20
+  interval: 25
+  batches: 5
 
 checkpoint:
-  directory: checkpoints/gpt2_100m
-  interval: 500
-  keep_last: 3
+  directory: checkpoints/benchmark_124m
+  interval: 50
+  keep_last: 1

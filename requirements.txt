@@ -6,3 +6,5 @@ tqdm
 pyyaml
 matplotlib
 pytest
+transformers
+safetensors
