@@ -390,3 +390,99 @@ class GPT(nn.Module):
             )
 
         return logits, loss
+
+    @torch.no_grad()
+    def generate(
+            self,
+            idx: torch.Tensor,
+            max_new_tokens: int,
+            temperature: float = 1.0,
+            top_k: int | None = None,
+            generator: torch.Generator | None = None,
+    ) -> torch.Tensor:
+        if idx.ndim != 2:
+            raise ValueError(
+                "idx must have shape "
+                "(batch_size, sequence_length)"
+            )
+
+        if max_new_tokens < 0:
+            raise ValueError(
+                "max_new_tokens must be non-negative"
+            )
+
+        if temperature < 0:
+            raise ValueError(
+                "temperature must be non-negative"
+            )
+
+        if top_k is not None and top_k <= 0:
+            raise ValueError(
+                "top_k must be positive"
+            )
+
+        was_training = self.training
+        self.eval()
+
+        try:
+            for _ in range(max_new_tokens):
+                # 如果序列超过最大上下文，只保留最后 block_size 个 Token
+                idx_context = idx[:, -self.config.block_size:]
+
+                logits, _ = self(idx_context)
+
+                # 只使用最后一个位置预测下一个 Token
+                next_token_logits = logits[:, -1, :]
+
+                if temperature == 0:
+                    # 贪心生成：始终选择得分最高的 Token
+                    next_token = torch.argmax(
+                        next_token_logits,
+                        dim=-1,
+                        keepdim=True,
+                    )
+                else:
+                    next_token_logits = (
+                            next_token_logits / temperature
+                    )
+
+                    if top_k is not None:
+                        effective_top_k = min(
+                            top_k,
+                            next_token_logits.size(-1),
+                        )
+
+                        top_values, _ = torch.topk(
+                            next_token_logits,
+                            effective_top_k,
+                        )
+
+                        threshold = top_values[:, [-1]]
+
+                        next_token_logits = (
+                            next_token_logits.masked_fill(
+                                next_token_logits < threshold,
+                                float("-inf"),
+                            )
+                        )
+
+                    probabilities = F.softmax(
+                        next_token_logits,
+                        dim=-1,
+                    )
+
+                    next_token = torch.multinomial(
+                        probabilities,
+                        num_samples=1,
+                        generator=generator,
+                    )
+
+                idx = torch.cat(
+                    (idx, next_token),
+                    dim=1,
+                )
+
+        finally:
+            self.train(was_training)
+
+        return idx

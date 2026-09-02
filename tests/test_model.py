@@ -270,3 +270,101 @@ def test_residual_projection_uses_scaled_init():
     actual_std = projection.weight.std().item()
 
     assert abs(actual_std - expected_std) < 0.003
+
+def test_generate_adds_requested_tokens():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    prompt = torch.randint(
+        0,
+        config.vocab_size,
+        (2, 4),
+    )
+
+    output = model.generate(
+        prompt,
+        max_new_tokens=6,
+        temperature=0,
+    )
+
+    assert output.shape == (2, 10)
+    assert torch.equal(output[:, :4], prompt)
+
+
+def test_greedy_generation_is_deterministic():
+    config = create_tiny_config()
+
+    torch.manual_seed(42)
+    model = GPT(config)
+
+    prompt = torch.tensor([[1, 2, 3]])
+
+    first = model.generate(
+        prompt,
+        max_new_tokens=5,
+        temperature=0,
+    )
+
+    second = model.generate(
+        prompt,
+        max_new_tokens=5,
+        temperature=0,
+    )
+
+    assert torch.equal(first, second)
+
+
+def test_sampled_generation_is_reproducible():
+    config = create_tiny_config()
+
+    torch.manual_seed(42)
+    model = GPT(config)
+
+    prompt = torch.tensor([[1, 2, 3]])
+
+    first_generator = torch.Generator()
+    first_generator.manual_seed(123)
+
+    second_generator = torch.Generator()
+    second_generator.manual_seed(123)
+
+    first = model.generate(
+        prompt,
+        max_new_tokens=5,
+        temperature=0.8,
+        top_k=10,
+        generator=first_generator,
+    )
+
+    second = model.generate(
+        prompt,
+        max_new_tokens=5,
+        temperature=0.8,
+        top_k=10,
+        generator=second_generator,
+    )
+
+    assert torch.equal(first, second)
+
+
+def test_generate_handles_long_context():
+    config = create_tiny_config()
+    model = GPT(config)
+
+    # 输入长度已经等于最大上下文
+    prompt = torch.randint(
+        0,
+        config.vocab_size,
+        (1, config.block_size),
+    )
+
+    output = model.generate(
+        prompt,
+        max_new_tokens=3,
+        temperature=0,
+    )
+
+    assert output.shape == (
+        1,
+        config.block_size + 3,
+    )
