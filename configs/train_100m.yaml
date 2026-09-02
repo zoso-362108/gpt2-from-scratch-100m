@@ -1,0 +1,38 @@
+project:
+  name: gpt2-from-scratch-100m
+  seed: 1337
+
+data:
+  directory: data/fineweb_100m
+  train_tokens: 100000000
+  validation_tokens: 5000000
+
+model:
+  block_size: 256
+  vocab_size: 50304
+  n_layer: 12
+  n_head: 12
+  n_embd: 768
+
+training:
+  micro_batch_size: 4
+  total_batch_tokens: 32768
+  max_steps: 3052
+
+  max_learning_rate: 0.0006
+  min_learning_rate: 0.00006
+  warmup_steps: 100
+  weight_decay: 0.1
+  gradient_clip: 1.0
+
+  precision: bfloat16
+  compile: false
+
+evaluation:
+  interval: 250
+  batches: 20
+
+checkpoint:
+  directory: checkpoints
+  interval: 500
+  keep_last: 3

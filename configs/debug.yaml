@@ -1,0 +1,36 @@
+project:
+  name: gpt2-debug
+  seed: 1337
+
+data:
+  directory: data/debug
+
+model:
+  block_size: 64
+  vocab_size: 50304
+  n_layer: 4
+  n_head: 4
+  n_embd: 128
+
+training:
+  micro_batch_size: 4
+  total_batch_tokens: 4096
+  max_steps: 100
+
+  max_learning_rate: 0.001
+  min_learning_rate: 0.0001
+  warmup_steps: 10
+  weight_decay: 0.1
+  gradient_clip: 1.0
+
+  precision: bfloat16
+  compile: false
+
+evaluation:
+  interval: 25
+  batches: 5
+
+checkpoint:
+  directory: checkpoints/debug
+  interval: 50
+  keep_last: 2
